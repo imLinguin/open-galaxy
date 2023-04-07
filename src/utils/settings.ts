@@ -92,7 +92,7 @@ export const getInitSettings = () => ({
     externalUsers: "https://external-users.gog.com",
     gameplay: "https://gameplay.gog.com",
     gog: "https://embed.gog.com",
-    gogGalaxyStoreApi: "https://embed.gog.com/",
+    gogGalaxyStoreApi: "https://embed.gog.com",
     notifications: "https://notifications.gog.com",
     pusher: "https://notifications-pusher.gog.com",
     library: "https://galaxy-library.gog.com",
@@ -106,6 +106,6 @@ export const getInitSettings = () => ({
   },
   ClientId: "46899977096215655",
   ChangelogBasePath: "",
-  ClientVersions: { Major: 4, Minor: 3, Build: 2, Compilation: 1 },
+  ClientVersions: { Major: 2, Minor: 0, Build: 61, Compilation: 1 },
   StartupPage: "discover_view",
 });

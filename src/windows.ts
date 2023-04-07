@@ -20,7 +20,7 @@ const spawnMainWindow = () => {
     webPreferences: {
       contextIsolation: false,
       nodeIntegration: false,
-      preload: path.join(__dirname, 'preloads', "main.js"),
+      preload: path.join(__dirname, "preloads", "main.js"),
     },
   });
 
@@ -30,6 +30,20 @@ const spawnMainWindow = () => {
     mainWindow.webContents.openDevTools({
       mode: "detach",
     });
+    mainWindow.webContents.send(
+      "callback",
+      JSON.stringify({
+        Command: "SetTrayState",
+        Arguments: { state: "notMinimizedToTray" },
+      })
+    );
+    mainWindow.webContents.send(
+      "callback",
+      JSON.stringify({
+        Command: "SetInternetConnectivityState",
+        Arguments: { State: true }, // TODO: Actually get connectivity state, and update it later on
+      })
+    );
     mainWindow.webContents.send(
       "callback",
       JSON.stringify({

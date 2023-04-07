@@ -1,3 +1,4 @@
+import axios from "axios";
 import { GOGCredential } from "../types";
 import { runGogdlCommand } from "../utils/gogdl";
 import { session } from "electron";
@@ -21,6 +22,8 @@ const getCredentials = async (): Promise<GOGCredential | null> => {
         callback({ requestHeaders: details.requestHeaders });
       }
     );
+
+    axios.defaults.headers.common.Authorization = `Bearer ${parsed.access_token}`;
     return parsed;
   } catch {
     console.error("Failed to parse credentials output");

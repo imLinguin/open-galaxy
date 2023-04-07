@@ -1,13 +1,15 @@
-import { app, BrowserWindow, ipcMain, session } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 
 app.setName("open-galaxy");
 
 import { MessageToClient } from "./types";
 import { createDefaultConfigs } from "./utils/settings";
-import auth from "./api/auth";
 import windows from "./windows";
+import auth from "./api/auth";
 import presence from "./api/presence";
 import gamesMeta from "./api/gamesMeta";
+import library from "./api/library";
+import user from "./api/user";
 import axios from "axios";
 
 let mainWindow: BrowserWindow | null = null;
@@ -30,6 +32,7 @@ app.once("ready", () => {
 });
 
 app.on("before-quit", () => {
+  console.log("Running before quit handlers");
   presence.deletePresence();
 });
 
@@ -39,7 +42,13 @@ ipcMain.on("sendToClient", async (event, message: string) => {
 
   switch (parsed.Command) {
     case "Log":
-      console.log(parsed.Arguments.logLevel, parsed.Arguments.message);
+      console.log(
+        parsed.Arguments.logLevel,
+        parsed.Arguments.message.slice(
+          0,
+          Math.min(parsed.Arguments.message.length - 1, 200)
+        )
+      );
       break;
     case "ExitGalaxyClient":
       app.exit(0);
@@ -77,6 +86,7 @@ ipcMain.on("sendToClient", async (event, message: string) => {
     case "ConnectToGOG":
       console.log("Connect to GOG");
       const credentials = await auth.getCredentials();
+      library.importGOG();
       mainWindow.webContents.send(
         "callback",
         JSON.stringify({
@@ -91,10 +101,11 @@ ipcMain.on("sendToClient", async (event, message: string) => {
       console.log("Ignoring tracking events");
       break;
     case "SetPresenceStatus":
-      presence.setPresence("online");
+      const status = parsed.Arguments?.presence ?? "online";
+      presence.setPresence(status);
       if (presenceHeartBeat) clearInterval(presenceHeartBeat);
       presenceHeartBeat = setInterval(() => {
-        presence.setPresence("online");
+        presence.setPresence(status);
       }, 5 * 60 * 1000);
 
       break;
@@ -109,9 +120,11 @@ ipcMain.on("sendToClient", async (event, message: string) => {
             ...games.map((id) => gamesMeta.getReviewScore(id)),
           ])
         : [];
-      const gamesData = await Promise.allSettled([
-        ...games.map((id) => gamesMeta.storeApi(id)),
-      ]);
+      const gamesData = await Promise.allSettled(
+        games.map((id) =>
+          Promise.all([gamesMeta.getProductsApi(id), gamesMeta.storeApi(id)])
+        )
+      );
       const dataToReturn = parsed.Arguments.gameReleaseKeys.reduce(
         (prev, key, index) => {
           const result = gamesData[index];
@@ -121,13 +134,13 @@ ipcMain.on("sendToClient", async (event, message: string) => {
             prev[key] = ids.reduce((p, id) => {
               switch (id) {
                 case "title":
-                  p[id] = data._embedded.product.title;
+                  p[id] = data[0].title;
                   break;
                 case "localizations":
-                  p[id] = data._embedded.localizations;
+                  p[id] = data[1]._embedded.localizations;
                   break;
                 case "productLinks":
-                  p[id] = data._embedded.product._links;
+                  p[id] = data[0].links;
                   break;
                 case "reviewScore":
                   const rating = ratings[index];
@@ -136,10 +149,18 @@ ipcMain.on("sendToClient", async (event, message: string) => {
                   }
                   break;
                 case "isEarlyAccess":
-                  p[id] = data.inDevelopment.active;
+                  p[id] = data[0].in_development.active;
                   break;
                 case "isPreorder":
-                  p[id] = data._embedded.product.isPreorder;
+                  p[id] = data[0].is_preorder;
+                  break;
+                case "storeOsCompatibility":
+                  p[id] = data[1]._embedded.supportedOperatingSystems.map(
+                    (os) => os.operatingSystem.name
+                  );
+                  break;
+                case "storeFeatures":
+                  p[id] = data[1]._embedded.features;
                   break;
                 // storeFeatures: undefined,
                 // storeMedia: undefined,
@@ -162,7 +183,27 @@ ipcMain.on("sendToClient", async (event, message: string) => {
         })
       );
       break;
+    case "Fetch":
+      const url = new URL(`https://api.gog.com/${parsed.Arguments.query}`);
+      const params = parsed.Arguments.queryParams;
+      for (const key in Object.keys(params)) {
+        url.searchParams.set(key, params[key]);
+      }
+      const res = await axios.get(url.toString());
 
+      const Arguments = {
+        requestId: parsed.Arguments.requestId,
+        responseStatus: { status: res.status },
+        response: { ...res.data },
+      };
+      const payload = JSON.stringify({
+        Command: "Fetch",
+        Arguments,
+      });
+
+      mainWindow.webContents.send("callback", payload);
+
+      break;
     default:
       console.warn("Unhandled command", parsed);
       break;
