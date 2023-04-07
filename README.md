@@ -3,7 +3,7 @@
 
 ## Purpose
 
-I'm trying to prove the point that it's easy to do <sub>will see abou tthat</sub>
+I'm trying to prove the point that it's easy to do <sub>will see about that</sub>
 
 ## How to get it
 
