@@ -51,6 +51,13 @@ const spawnMainWindow = () => {
         Arguments: { ...getInitSettings() },
       })
     );
+    mainWindow.webContents.send(
+      "callback",
+      JSON.stringify({
+        Command: "PluginsDetails",
+        Arguments: { availablePlugins: [] },
+      })
+    );
     mainWindow.show();
   });
 

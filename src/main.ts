@@ -39,6 +39,7 @@ app.on("before-quit", () => {
 ipcMain.on("sendToClient", async (event, message: string) => {
   const parsed: MessageToClient = JSON.parse(message);
   const window = windows.get(parsed.Arguments?.WindowName) ?? mainWindow;
+  const credentials = await auth.getCredentials();
 
   switch (parsed.Command) {
     case "Log":
@@ -61,8 +62,8 @@ ipcMain.on("sendToClient", async (event, message: string) => {
             mainWindow.webContents.send(
               "callback",
               JSON.stringify({
-                Command: "closed",
-                Arguments: { windowName: parsed.Arguments.WindowName },
+                Command: "BrowserDestroyed",
+                Arguments: { WindowId: parsed.Arguments.WindowName },
               })
             );
           }
@@ -85,7 +86,6 @@ ipcMain.on("sendToClient", async (event, message: string) => {
       break;
     case "ConnectToGOG":
       console.log("Connect to GOG");
-      const credentials = await auth.getCredentials();
       library.importGOG();
       mainWindow.webContents.send(
         "callback",
@@ -106,82 +106,52 @@ ipcMain.on("sendToClient", async (event, message: string) => {
       if (presenceHeartBeat) clearInterval(presenceHeartBeat);
       presenceHeartBeat = setInterval(() => {
         presence.setPresence(status);
+        if (mainWindow) {
+          mainWindow.webContents.send(
+            "callback",
+            JSON.stringify({
+              Command: "UpdatedPresenceStatus",
+              Arguments: {
+                presence: status,
+              },
+            })
+          );
+        }
       }, 5 * 60 * 1000);
 
       break;
     case "GetGamesPieces":
-      const games: string[] = parsed.Arguments.gameReleaseKeys.map((game) =>
-        game.split("_").pop()
-      );
-
+      const games: string[] = parsed.Arguments.gameReleaseKeys;
       const ids: string[] = parsed.Arguments.pieceIds;
-      const ratings = ids.includes("reviewScore")
-        ? await Promise.allSettled([
-            ...games.map((id) => gamesMeta.getReviewScore(id)),
-          ])
-        : [];
-      const gamesData = await Promise.allSettled(
-        games.map((id) =>
-          Promise.all([gamesMeta.getProductsApi(id), gamesMeta.storeApi(id)])
-        )
-      );
-      const dataToReturn = parsed.Arguments.gameReleaseKeys.reduce(
-        (prev, key, index) => {
-          const result = gamesData[index];
-          if (result.status === "fulfilled") {
-            const data = result.value;
+      const libraryEntries = library.getParsedConfigEntries();
 
-            prev[key] = ids.reduce((p, id) => {
-              switch (id) {
-                case "title":
-                  p[id] = data[0].title;
-                  break;
-                case "localizations":
-                  p[id] = data[1]._embedded.localizations;
-                  break;
-                case "productLinks":
-                  p[id] = data[0].links;
-                  break;
-                case "reviewScore":
-                  const rating = ratings[index];
-                  if (rating.status === "fulfilled") {
-                    p[id] = rating.value.value;
-                  }
-                  break;
-                case "isEarlyAccess":
-                  p[id] = data[0].in_development.active;
-                  break;
-                case "isPreorder":
-                  p[id] = data[0].is_preorder;
-                  break;
-                case "storeOsCompatibility":
-                  p[id] = data[1]._embedded.supportedOperatingSystems.map(
-                    (os) => os.operatingSystem.name
-                  );
-                  break;
-                case "storeFeatures":
-                  p[id] = data[1]._embedded.features;
-                  break;
-                // storeFeatures: undefined,
-                // storeMedia: undefined,
-                // storeOsCompatibility: undefined,
-                // storeTags: undefined,
-              }
-              return p;
-            }, {});
-          }
-          return prev;
-        },
-        {}
-      );
+      while (games.length > 0) {
+        let dataToReturn = {};
+        const chunk = games.splice(0, 10);
 
-      mainWindow.webContents.send(
-        "callback",
-        JSON.stringify({
-          Command: "GamesPiecesData",
-          Arguments: { ...dataToReturn },
-        })
-      );
+        const pieces = await Promise.all(
+          chunk.map((game) => {
+            const libEntry = libraryEntries.find(
+              (entry) => game === `${entry.platform_id}_${entry.external_id}`
+            );
+
+            return library.getGamesPiece(game, ids, libEntry);
+          })
+        );
+
+        pieces.forEach((piece) => {
+          dataToReturn = { ...piece, ...dataToReturn };
+        });
+
+        mainWindow.webContents.send(
+          "callback",
+          JSON.stringify({
+            Command: "GamesPiecesData",
+            Arguments: { ...dataToReturn },
+          })
+        );
+      }
+
       break;
     case "Fetch":
       const url = new URL(`https://api.gog.com/${parsed.Arguments.query}`);
@@ -209,3 +179,6 @@ ipcMain.on("sendToClient", async (event, message: string) => {
       break;
   }
 });
+
+ipcMain.handle("user.getUserInfo", user.getUserInfo);
+ipcMain.handle("library.getOwnedReleaseKeys", library.importGOG);
