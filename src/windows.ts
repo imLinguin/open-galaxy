@@ -2,7 +2,7 @@ import path from "node:path";
 import { BrowserWindow, shell } from "electron";
 import { getInitSettings } from "./utils/settings";
 
-const spawnMainWindow = () => {
+const spawnMainWindow = (initiallyShowed: boolean = false): BrowserWindow => {
   const mainWindow = new BrowserWindow({
     icon: path.join(
       __dirname,
@@ -15,6 +15,8 @@ const spawnMainWindow = () => {
     width: 1550,
     height: 750,
     frame: false,
+    show: initiallyShowed,
+    paintWhenInitiallyHidden: true,
     backgroundColor: "black",
     fullscreenable: false,
     webPreferences: {
@@ -24,7 +26,11 @@ const spawnMainWindow = () => {
     },
   });
 
-  mainWindow.loadFile(path.join(__dirname, "..", "web", "main.html"));
+  if (process.env.VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL + "/main.html");
+  } else {
+    mainWindow.loadFile(path.join(__dirname, "..", "web", "main.html"));
+  }
 
   mainWindow.webContents.on("did-finish-load", () => {
     mainWindow.webContents.openDevTools({
@@ -58,7 +64,6 @@ const spawnMainWindow = () => {
         Arguments: { availablePlugins: [] },
       })
     );
-    mainWindow.show();
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url, features }) => {
@@ -86,7 +91,7 @@ const spawnMainWindow = () => {
   return mainWindow;
 };
 
-const spawnLoginWindow = () => {
+const spawnLoginWindow = (): BrowserWindow => {
   const window = new BrowserWindow({
     height: 700,
     frame: false,
@@ -100,19 +105,12 @@ const spawnLoginWindow = () => {
     },
   });
 
-  window.loadFile(path.join(__dirname, "..", "web", "login.html"));
-
-  window.webContents.addListener("did-finish-load", () => {
-    window.webContents.openDevTools({ mode: "detach" });
-    window.webContents.send(
-      "callback",
-      JSON.stringify({
-        Command: "AuthenticationStateChanged",
-        Arguments: { authenticationState: "loginForm" },
-      })
-    );
-    window.show();
-  });
+  if (process.env.VITE_DEV_SERVER_URL) {
+    window.loadURL(process.env.VITE_DEV_SERVER_URL + "/login.html");
+  } else {
+    window.loadFile(path.join(__dirname, "..", "web", "login.html"));
+  }
+  return window;
 };
 
 const get = (key?: string): BrowserWindow | undefined =>

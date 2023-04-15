@@ -10,4 +10,5 @@ const getUserInfo = async () => {
   return res.data;
 };
 
+
 export default { getUserInfo };

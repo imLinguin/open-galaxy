@@ -12,7 +12,7 @@ declare global {
 window.loginInitData = {
   os: "windows",
   loggingLevel: 8,
-  loginType: "login",
+  loginType: "previousSession",
   clientId: "46899977096215655",
   campaignParamsForLogin: "",
   brandedGame: null,
@@ -21,7 +21,7 @@ window.loginInitData = {
     Chat: "https://chat.gog.com",
     Auth: "https://auth.gog.com",
   },
-  settingsData: { lanuageCode: "en-US" },
+  settingsData: { languageCode: "en-US" },
 };
 
 window.sendToClient = (message: string) => {

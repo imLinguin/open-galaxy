@@ -3,7 +3,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 app.setName("open-galaxy");
 
 import { MessageToClient } from "./types";
-import { createDefaultConfigs } from "./utils/settings";
+import { createDefaultConfigs, getGalaxyInitData } from "./utils/settings";
 import windows from "./windows";
 import auth from "./api/auth";
 import presence from "./api/presence";
@@ -11,20 +11,48 @@ import gamesMeta from "./api/gamesMeta";
 import library from "./api/library";
 import user from "./api/user";
 import axios from "axios";
+import { unlinkSync } from "node:fs";
+import { AUTH_CONFIG_PATH, FETCH_URIS } from "./constants";
+import gameplay from "./api/gameplay";
 
 let mainWindow: BrowserWindow | null = null;
 let presenceHeartBeat = null;
 
 const init = async () => {
   // Init application
+  const loginWindow = windows.spawnLoginWindow();
   createDefaultConfigs();
-  const credentials = await auth.getCredentials();
-  if (!credentials) {
-    // Not logged in
-    windows.spawnLoginWindow();
-    return;
-  }
-  mainWindow = windows.spawnMainWindow();
+
+  loginWindow.webContents.addListener("did-finish-load", async () => {
+    loginWindow.webContents.openDevTools({ mode: "detach" });
+
+    loginWindow.show();
+    const credentials = await auth.getCredentials();
+    if (!credentials) {
+      // Not logged in
+      loginWindow.webContents.send(
+        "callback",
+        JSON.stringify({
+          Command: "AuthenticationStateChanged",
+          Arguments: { authenticationState: "loginForm" },
+        })
+      );
+      return;
+    }
+    mainWindow = windows.spawnMainWindow();
+    loginWindow.webContents.send(
+      "callback",
+      JSON.stringify({
+        Command: "AuthenticationStateChanged",
+        Arguments: { authenticationState: "completed" },
+      })
+    );
+    setTimeout(() => {
+      // Make it fancy
+      loginWindow.close();
+      mainWindow.show();
+    }, 3000);
+  });
 };
 
 app.once("ready", () => {
@@ -44,6 +72,7 @@ ipcMain.on("sendToClient", async (event, message: string) => {
   switch (parsed.Command) {
     case "Log":
       console.log(
+        "RENDERER: ",
         parsed.Arguments.logLevel,
         parsed.Arguments.message.slice(
           0,
@@ -79,9 +108,9 @@ ipcMain.on("sendToClient", async (event, message: string) => {
       }
       break;
     case "LoginSuccess":
-      auth.finishLogin(parsed.Arguments.AuthorizationCode).finally(() => {
+      auth.finishLogin(parsed.Arguments.AuthorizationCode).finally(async () => {
         windows.get("login")?.close();
-        init();
+        mainWindow = windows.spawnMainWindow(true);
       });
       break;
     case "ConnectToGOG":
@@ -154,12 +183,18 @@ ipcMain.on("sendToClient", async (event, message: string) => {
 
       break;
     case "Fetch":
-      const url = new URL(`https://api.gog.com/${parsed.Arguments.query}`);
-      const params = parsed.Arguments.queryParams;
-      for (const key in Object.keys(params)) {
-        url.searchParams.set(key, params[key]);
+      let url: string = "";
+      if (parsed.Arguments.query === "news") {
+        url = `https://api.gog.com/news?limit=${parsed.Arguments.queryParams.limit}`;
+      } else if (parsed.Arguments.query === "leaderboards") {
+        url = `https://gameplay.gog.com/users/${credentials.user_id}/period/${
+          parsed.Arguments.queryParams.period
+        }/scoreboards?types=${parsed.Arguments.queryParams.types.join(",")}`;
+      } else {
+        console.error("Unknown fetch query", parsed.Arguments.query);
+        return;
       }
-      const res = await axios.get(url.toString());
+      const res = await axios.get(url);
 
       const Arguments = {
         requestId: parsed.Arguments.requestId,
@@ -174,11 +209,41 @@ ipcMain.on("sendToClient", async (event, message: string) => {
       mainWindow.webContents.send("callback", payload);
 
       break;
+
+    case "GetStatistics":
+      const type = parsed.Arguments.unitType;
+      const since = parsed.Arguments.histogramDataSince;
+      console.log("TODO: handle GetStatistics", parsed.Arguments);
+      break;
+
+    case "FriendsRecentPlaySessions":
+      mainWindow.webContents.send(
+        "callback",
+        JSON.stringify({
+          Command: "FriendsRecentPlaySessionsData",
+          Arguments: { content: await gameplay.getFriendsRecentlyPlayed() },
+        })
+      );
+      break;
+
+    case "LogoutUser":
+      mainWindow.close();
+      unlinkSync(AUTH_CONFIG_PATH);
+      createDefaultConfigs();
+      init();
+
+      break;
     default:
       console.warn("Unhandled command", parsed);
       break;
   }
 });
 
+ipcMain.on("galaxyInitData", (event) => {
+  return new Promise(async (resolve) => {
+    event.returnValue = await getGalaxyInitData();
+    resolve(event);
+  });
+});
 ipcMain.handle("user.getUserInfo", user.getUserInfo);
 ipcMain.handle("library.getOwnedReleaseKeys", library.importGOG);

@@ -1,5 +1,9 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { AUTH_CONFIG_PATH, CONFIG_PATH } from "../constants";
+import user from "../api/user";
+import auth from "../api/auth";
+import library from "../api/library";
+import gameplay from "../api/gameplay";
 
 export const createDefaultConfigs = () => {
   if (!existsSync(CONFIG_PATH)) {
@@ -64,8 +68,162 @@ export const readConfig = () => {
 
 export const updateConfig = (value) => {};
 
+export const getGalaxyInitData = async () => {
+  await auth.getCredentials();
+
+  const [userData, ownedGameReleaseKeys, friendsRecentPlaySessions] =
+    await Promise.all([
+      user.getUserInfo(),
+      library.importGOG(),
+      gameplay.getFriendsRecentlyPlayed(),
+    ]);
+
+  return {
+    os: "windows",
+    osVersion: "6.0",
+    driverVersions: {},
+    endpoints: {
+      api: "https://api.gog.com",
+      chat: "https://chat.gog.com",
+      externalAccounts: "https://external-accounts.gog.com",
+      externalUsers: "https://external-users.gog.com",
+      gameplay: "https://gameplay.gog.com",
+      gog: "https://embed.gog.com",
+      gogGalaxyStoreApi: "https://embed.gog.com",
+      marketingSections: "https://marketing-sections.gog.com",
+      library: "https://galaxy-library.gog.com",
+      users: "https://users.gog.com",
+      redeem: "https://redeem.gog.com",
+    },
+    environemnt: "x64",
+    loggingLevel: 8,
+    initialGameReleaseKeys: {
+      ownedGameReleaseKeys,
+      installedGameReleaseKeys: [],
+    },
+    friendsRecentPlaySessions,
+    settingsData: {
+      languageCode: "en-US",
+      notifChatMessage: true,
+      notifDownloadStatus: true,
+      notifDownloadStatus_overlay: true,
+      notifFriendInvite: true,
+      notifFriendOnline: true,
+      notifFriendStartsGame: true,
+      notifGameInvite: true,
+      notifSoundChatMessage: true,
+      notifSoundDownloadStatus: false,
+      notifSoundFriendInvite: true,
+      notifSoundFriendOnline: false,
+      notifSoundFriendStartsGame: false,
+      notifSoundGameInvite: true,
+      notifSoundVolume: 50,
+      showFriendsSidebar: true,
+      store: {},
+    },
+    userData: {
+      userId: userData.id,
+      username: userData.username,
+      email: userData.email,
+      avatar: userData.avatar.medium,
+      presence: "online",
+    },
+    instantLicenseGames: [],
+    instantLicenseGrks: [],
+    connectedPlatforms: [],
+    inSingleGameMode: false,
+    installationSource: "gog",
+  };
+};
+
 export const getInitSettings = () => ({
-  Languages: [],
+  Languages: [
+    {
+      Code: "en",
+      EnglishName: "English",
+      NativeName: "English",
+    },
+    {
+      Code: "de",
+      EnglishName: "German",
+      NativeName: "Deutsch",
+    },
+    {
+      Code: "fr",
+      EnglishName: "French",
+      NativeName: "Français",
+    },
+    {
+      Code: "ru",
+      EnglishName: "Russian",
+      NativeName: "Русский",
+    },
+    {
+      Code: "pl",
+      EnglishName: "Polish",
+      NativeName: "Polski",
+    },
+    {
+      Code: "es",
+      EnglishName: "Spanish",
+      NativeName: "Español",
+    },
+    {
+      Code: "it",
+      EnglishName: "Italian",
+      NativeName: "Italiano",
+    },
+    {
+      Code: "jp",
+      EnglishName: "Japanese",
+      NativeName: "日本語",
+    },
+    {
+      Code: "ko",
+      EnglishName: "Korean",
+      NativeName: "한국어",
+    },
+    {
+      Code: "pt",
+      EnglishName: "Portuguese",
+      NativeName: "Português",
+    },
+    {
+      Code: "tr",
+      EnglishName: "Turkish",
+      NativeName: "Türkçe",
+    },
+    {
+      Code: "cz",
+      EnglishName: "Czech",
+      NativeName: "Čeština",
+    },
+    {
+      Code: "cn",
+      EnglishName: "Chinese",
+      NativeName: "中文",
+    },
+    {
+      Code: "hu",
+      EnglishName: "Hungarian",
+      NativeName: "Magyar",
+    },
+    {
+      Code: "nl",
+      EnglishName: "Dutch",
+      NativeName: "Nederlands",
+    },
+    {
+      Code: "ho",
+      EnglishName: "Hiri Motu",
+      NativeName: "Hiri Motu",
+    },
+    {
+      Code: "ro",
+      EnglishName: "Romanian",
+      NativeName: "Română",
+    },
+  ],
   SettingsData: {
     languageCode: "en-US",
     notifChatMessage: true,

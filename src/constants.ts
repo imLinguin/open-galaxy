@@ -27,3 +27,8 @@ export const LANGUAGES = [
   "pt-PT",
   "zh-Hant",
 ];
+
+export const FETCH_URIS = {
+  news: "https://api.gog.com/news",
+  scoreboards: "https://gameplay.gog.com/users/{{userId}}/period/{{period}}/scoreboards"
+}

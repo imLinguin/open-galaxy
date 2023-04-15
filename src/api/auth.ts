@@ -2,6 +2,7 @@ import axios from "axios";
 import { GOGCredential } from "../types";
 import { runGogdlCommand } from "../utils/gogdl";
 import { session } from "electron";
+import windows from "../windows";
 
 const getCredentials = async (): Promise<GOGCredential | null> => {
   const { stdout, stderr, exitcode } = await runGogdlCommand(["auth"]);
@@ -32,6 +33,16 @@ const getCredentials = async (): Promise<GOGCredential | null> => {
 };
 
 const finishLogin = async (code: string): Promise<void> => {
+  const loginWindow = windows.get("login");
+  if (loginWindow)
+    loginWindow.webContents.send(
+      "callback",
+      JSON.stringify({
+        Command: "AuthenticationStateChanged",
+        Arguments: { authenticationState: "completed" },
+      })
+    );
+
   const { stdout, stderr, exitcode } = await runGogdlCommand([
     "auth",
     "--code",
@@ -39,6 +50,10 @@ const finishLogin = async (code: string): Promise<void> => {
   ]);
   if (exitcode === 0) {
     console.log("Login success");
+
+    const parsed: GOGCredential = JSON.parse(stdout.trim());
+
+    axios.defaults.headers.common.Authorization = `Bearer ${parsed.access_token}`;
   }
 };
 

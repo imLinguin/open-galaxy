@@ -11,6 +11,7 @@ import { CONFIG_PATH } from "../constants";
 import { existsSync, readFileSync } from "fs";
 import { readFile, writeFile } from "fs/promises";
 import windows from "../windows";
+import gamesMeta from "./gamesMeta";
 
 const galaxy_library_config_path = path.join(
   CONFIG_PATH,
@@ -120,107 +121,186 @@ const getGamesPiece = async (
   libEntry?: GalaxyLibraryEntry
 ): Promise<any> => {
   const [platform_id, external_id] = id.split("_");
-  const gamesdbData = await fetchOrUpdateGamesDb(
-    platform_id,
-    external_id,
-    libEntry?.certificate
-  );
+
   const response = {};
   // TODO: Support my values
-  ids.forEach((id) => {
-    switch (id) {
-      case "addedToLibraryDates":
-        response[id] = {
-          purchaseTimestamp: libEntry.owned_since,
-          addedTimestamp: libEntry.date_created,
-        };
-        break;
-      case "installationDate":
-        response[id] = null;
-        break;
+  if (libEntry) {
+    const gamesdbData = await fetchOrUpdateGamesDb(
+      platform_id,
+      external_id,
+      libEntry?.certificate
+    );
+    ids.forEach((id) => {
+      switch (id) {
+        case "addedToLibraryDates":
+          response[id] = {
+            purchaseTimestamp: libEntry.owned_since,
+            addedTimestamp: libEntry.date_created,
+          };
+          break;
+        case "installationDate":
+          response[id] = null;
+          break;
 
-      case "isVisibleInLibrary":
-        response[id] = gamesdbData.game.visible_in_library;
-        break;
+        case "isVisibleInLibrary":
+          response[id] = gamesdbData.game.visible_in_library;
+          break;
 
-      case "meta":
-        response[id] = {
-          releaseDate: gamesdbData.game.first_release_date,
-          developers: gamesdbData.game.developers,
-          publishers: gamesdbData.game.publishers,
-          themes: gamesdbData.game.themes,
-          genres: gamesdbData.game.genres,
-          releases: gamesdbData.game.releases,
-          criticsScore: gamesdbData.game.aggregated_rating,
-        };
-        break;
+        case "meta":
+          response[id] = {
+            releaseDate: gamesdbData.game.first_release_date,
+            developers: gamesdbData.game.developers,
+            publishers: gamesdbData.game.publishers,
+            themes: gamesdbData.game.themes,
+            genres: gamesdbData.game.genres,
+            releases: gamesdbData.game.releases,
+            criticsScore: gamesdbData.game.aggregated_rating,
+          };
+          break;
 
-      case "myIsHidden":
-        response[id] = false;
-        break;
+        case "myIsHidden":
+          response[id] = false;
+          break;
 
-      case "myPlayTime":
-        response[id] = false;
-        break;
+        case "myPlayTime":
+          response[id] = false;
+          break;
 
-      case "myTags":
-        response[id] = {tags:[]};
-        break;
-      case "osCompatibility":
-        response[id] = gamesdbData.supported_operating_systems;
-        break;
-      case "title":
-        response[id] = gamesdbData.title["*"];
-        break;
+        case "myTags":
+          response[id] = { tags: [] };
+          break;
+        case "osCompatibility":
+          response[id] = gamesdbData.supported_operating_systems;
+          break;
+        case "title":
+          response[id] = gamesdbData.title["*"];
+          break;
 
-      case "sortingTitle":
-        response[id] = gamesdbData.sorting_title["*"];
-        break;
+        case "sortingTitle":
+          response[id] = gamesdbData.sorting_title["*"];
+          break;
 
-      case "isDlc":
-        response[id] = gamesdbData.type === "dlc";
-        break;
+        case "isDlc":
+          response[id] = gamesdbData.type === "dlc";
+          break;
 
-      case "localState":
-        response[id] = "none";
-        break;
+        case "localState":
+          response[id] = "none";
+          break;
 
-      case "myAchievementsCount":
-        response[id] = 0;
-        break;
+        case "myAchievementsCount":
+          response[id] = 0;
+          break;
 
-      case "myLastPlayedDate":
-        response[id] = null;
-        break;
+        case "myLastPlayedDate":
+          response[id] = null;
+          break;
 
-      case "myRating":
-        response[id] = null;
-        break;
+        case "myRating":
+          response[id] = null;
+          break;
 
-      case "originalGameLink":
-        response[id] = null;
-        break;
+        case "originalGameLink":
+          response[id] = null;
+          break;
 
-      case "platform":
-        response[id] = {};
-        break;
+        case "platform":
+          response[id] = {};
+          break;
 
-      case "subscriptions":
-        response[id] = [];
-        break;
-      case "images":
-        response[id] = {
-          background: gamesdbData.game.background?.url_format,
-          verticalCover: gamesdbData.game.vertical_cover?.url_format,
-          icon: gamesdbData.game.square_icon?.url_format,
-          logo: gamesdbData.logo?.url_format,
-        };
-        break;
-      default:
-        console.log(`Unuspported pieceId: ${id}`);
-        break;
-    }
-  });
+        case "subscriptions":
+          response[id] = [];
+          break;
+        case "images":
+          response[id] = {
+            originalImages: {
+              background: gamesdbData.game.background?.url_format,
+              verticalCover: gamesdbData.game.vertical_cover?.url_format,
+              icon: gamesdbData.game.square_icon?.url_format,
+              logo: gamesdbData.logo?.url_format,
+            },
+            screenshots: gamesdbData.game.screenshots,
+            videos: gamesdbData.game.videos,
+          };
+          break;
+      }
+    });
+  }
+
+  if (platform_id === "gog") {
+    const storeApiData = await gamesMeta.storeApi(external_id);
+
+    ids.forEach((id) => {
+      switch (id) {
+        case "isEarlyAccess":
+          response[id] = storeApiData.inDevelopment.active;
+          break;
+        case "isPreorder":
+          response[id] = storeApiData._embedded.isPreorder;
+          break;
+        case "localizations":
+          const perLanguageScopes = storeApiData._embedded.localizations.reduce(
+            (val, lang) => {
+              const code = lang._embedded.language.code;
+              const scope = lang._embedded.localizationScope.type;
+              if (!val[code]) {
+                val[code] = [];
+              }
+
+              if (!val[code].includes(scope)) {
+                val[code].push(scope);
+              }
+
+              return val;
+            },
+            {}
+          );
+
+          response[id] = {
+            localizations: Object.keys(perLanguageScopes).map((lang) => ({
+              language: lang,
+              scopes: perLanguageScopes[lang],
+            })),
+          };
+
+          break;
+        case "productLinks":
+          response[id] = Object.keys(storeApiData._links).reduce(
+            (prev, next) => {
+              prev[next] = storeApiData._links[next].href;
+              return prev;
+            },
+            {}
+          );
+
+          response[id] = { ...response[id], productCard: response[id].self };
+          break;
+        case "reviewScore":
+          response[id] = { score: null };
+          break;
+        case "storeFeatures":
+          response[id] = { features: storeApiData._embedded.features };
+          break;
+        case "storeMedia":
+          response[id] = {
+            videos: storeApiData._embedded.videos,
+            screenshots: storeApiData._embedded.screenshots.map(
+              (screen) => screen._links.self.href
+            ),
+            isFromProductsApi: true,
+          };
+          break;
+        case "storeOsCompatibility":
+          response[id] = storeApiData._embedded.supportedOperatingSystems.map(
+            (supported) => supported.operatingSystem
+          );
+          break;
+        case "storeTags":
+          response[id] = { tags: storeApiData._embedded.properties };
+          break;
+      }
+    });
+  }
 
   const data = {};
   data[id] = response;
