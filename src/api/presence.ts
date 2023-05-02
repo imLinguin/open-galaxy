@@ -12,7 +12,7 @@ const setPresence = async (state: "online" | "invisible") => {
       version: "2.0.45.61",
     },
     { headers: { Authorization: `Bearer ${credentials.access_token}` } }
-  );
+  ).catch(e=>console.error("Failed to update presence"));
 };
 const deletePresence = async () => {
   const credentials = await auth.getCredentials();
@@ -21,7 +21,7 @@ const deletePresence = async () => {
     {
       headers: { Authorization: `Bearer ${credentials.access_token}` },
     }
-  );
+  ).catch(e=>console.error("Failed to delete presence"));
 };
 
 export default { setPresence, deletePresence };

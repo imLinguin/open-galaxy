@@ -24,8 +24,6 @@ const init = async () => {
   createDefaultConfigs();
 
   loginWindow.webContents.addListener("did-finish-load", async () => {
-    loginWindow.webContents.openDevTools({ mode: "detach" });
-
     loginWindow.show();
     const credentials = await auth.getCredentials();
     if (!credentials) {
@@ -39,6 +37,7 @@ const init = async () => {
       );
       return;
     }
+    windows.spawnNotificationWindow();
     mainWindow = windows.spawnMainWindow();
     loginWindow.webContents.send(
       "callback",
@@ -149,6 +148,7 @@ ipcMain.on("sendToClient", async (event, message: string) => {
       }, 5 * 60 * 1000);
 
       break;
+    case "RefreshGamesPieces":
     case "GetGamesPieces":
       const games: string[] = parsed.Arguments.gameReleaseKeys;
       const ids: string[] = parsed.Arguments.pieceIds;
@@ -194,7 +194,11 @@ ipcMain.on("sendToClient", async (event, message: string) => {
         console.error("Unknown fetch query", parsed.Arguments.query);
         return;
       }
-      const res = await axios.get(url);
+      const res = await axios.get(url).catch((err) => {
+        console.error("Failed to complete fetch request", err);
+      });
+
+      if (!res) return;
 
       const Arguments = {
         requestId: parsed.Arguments.requestId,

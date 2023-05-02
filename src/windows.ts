@@ -1,17 +1,10 @@
 import path from "node:path";
-import { BrowserWindow, shell } from "electron";
+import { BrowserWindow, app, screen, shell } from "electron";
 import { getInitSettings } from "./utils/settings";
 
 const spawnMainWindow = (initiallyShowed: boolean = false): BrowserWindow => {
   const mainWindow = new BrowserWindow({
-    icon: path.join(
-      __dirname,
-      "..",
-      "web",
-      "images",
-      "gogGalaxyLogo",
-      "gog-galaxy-logo-72px.png"
-    ),
+    icon: path.join(__dirname, "..", "assets", "icon.png"),
     width: 1550,
     height: 750,
     frame: false,
@@ -26,11 +19,7 @@ const spawnMainWindow = (initiallyShowed: boolean = false): BrowserWindow => {
     },
   });
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL + "/main.html");
-  } else {
-    mainWindow.loadFile(path.join(__dirname, "..", "web", "main.html"));
-  }
+  mainWindow.loadFile(path.join(__dirname, "..", "web", "main.html"));
 
   mainWindow.webContents.on("did-finish-load", () => {
     mainWindow.webContents.openDevTools({
@@ -66,6 +55,7 @@ const spawnMainWindow = (initiallyShowed: boolean = false): BrowserWindow => {
     );
   });
 
+  mainWindow.on("closed", () => app.quit());
   mainWindow.webContents.setWindowOpenHandler(({ url, features }) => {
     console.log("spawning window", url, features);
     if (url.startsWith("https")) {
@@ -91,12 +81,36 @@ const spawnMainWindow = (initiallyShowed: boolean = false): BrowserWindow => {
   return mainWindow;
 };
 
+const spawnNotificationWindow = (): BrowserWindow => {
+  const display = screen.getPrimaryDisplay().workAreaSize;
+  const window = new BrowserWindow({
+    height: 200,
+    width: 500,
+    x: display.width - 200,
+    y: display.height - 500,
+    skipTaskbar: true,
+    resizable: false,
+    frame: false,
+    transparent: true,
+    show: false,
+    webPreferences: {
+      contextIsolation: false,
+      nodeIntegration: false,
+      preload: path.join(__dirname, "preloads", "notifications.js"),
+    },
+  });
+  window.loadFile(path.join(__dirname, "..", "web", "notifications.html"));
+
+  return window;
+};
+
 const spawnLoginWindow = (): BrowserWindow => {
   const window = new BrowserWindow({
     height: 700,
     frame: false,
     width: 400,
     maximizable: false,
+    alwaysOnTop: true,
     backgroundColor: "black",
     webPreferences: {
       contextIsolation: false,
@@ -105,11 +119,8 @@ const spawnLoginWindow = (): BrowserWindow => {
     },
   });
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    window.loadURL(process.env.VITE_DEV_SERVER_URL + "/login.html");
-  } else {
-    window.loadFile(path.join(__dirname, "..", "web", "login.html"));
-  }
+  window.loadFile(path.join(__dirname, "..", "web", "login.html"));
+
   return window;
 };
 
@@ -118,4 +129,9 @@ const get = (key?: string): BrowserWindow | undefined =>
     window.webContents.getURL().endsWith((key || "main") + ".html")
   );
 
-export default { get, spawnLoginWindow, spawnMainWindow };
+export default {
+  get,
+  spawnLoginWindow,
+  spawnMainWindow,
+  spawnNotificationWindow,
+};

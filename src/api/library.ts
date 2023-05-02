@@ -91,26 +91,12 @@ const fetchOrUpdateGamesDb = async (
 
 const importGOG = async () => {
   const credentials = await auth.getCredentials();
-  const mainWindow = windows.get("main");
 
   const library = await fetchGalaxyLibrary(credentials);
 
   const ownedKeys = library.map(
     (game) => `${game.platform_id}_${game.external_id}`
   );
-
-  if (mainWindow) {
-    mainWindow.webContents.send(
-      "callback",
-      JSON.stringify({
-        Command: "OwnedGameReleaseKeys",
-        Arguments: {
-          UpdateType: "set",
-          GameReleaseKeys: ownedKeys,
-        },
-      })
-    );
-  }
 
   return ownedKeys;
 };
@@ -139,20 +125,24 @@ const getGamesPiece = async (
           };
           break;
         case "installationDate":
-          response[id] = null;
+          response[id] = { timestamp: null };
           break;
 
         case "isVisibleInLibrary":
-          response[id] = gamesdbData.game.visible_in_library;
+          response[id] = {
+            isVisibleInLibrary:
+              gamesdbData.game.type === "game" &&
+              gamesdbData.game.visible_in_library,
+          };
           break;
 
         case "meta":
           response[id] = {
-            releaseDate: gamesdbData.game.first_release_date,
-            developers: gamesdbData.game.developers,
-            publishers: gamesdbData.game.publishers,
-            themes: gamesdbData.game.themes,
-            genres: gamesdbData.game.genres,
+            releaseDate: { timestamp: gamesdbData.game.first_release_date },
+            developers: gamesdbData.game.developers.map((dev) => dev.name),
+            publishers: gamesdbData.game.publishers.map((pub) => pub.name),
+            themes: gamesdbData.game.themes.map((theme) => theme.name["*"]),
+            genres: gamesdbData.game.genres.map((genre) => genre.name["*"]),
             releases: gamesdbData.game.releases,
             criticsScore: gamesdbData.game.aggregated_rating,
           };
@@ -170,18 +160,20 @@ const getGamesPiece = async (
           response[id] = { tags: [] };
           break;
         case "osCompatibility":
-          response[id] = gamesdbData.supported_operating_systems;
+          response[id] = {
+            supported: gamesdbData.supported_operating_systems,
+          };
           break;
         case "title":
-          response[id] = gamesdbData.title["*"];
+          response[id] = { title: gamesdbData.title["*"] };
           break;
 
         case "sortingTitle":
-          response[id] = gamesdbData.sorting_title["*"];
+          response[id] = { title: gamesdbData.sorting_title["*"] };
           break;
 
         case "isDlc":
-          response[id] = gamesdbData.type === "dlc";
+          response[id] = { isDlc: gamesdbData.type === "dlc" };
           break;
 
         case "localState":
@@ -201,24 +193,39 @@ const getGamesPiece = async (
           break;
 
         case "originalGameLink":
-          response[id] = null;
+          response[id] = { target: gamesdbData.game_id };
           break;
 
         case "platform":
-          response[id] = {};
+          response[id] = { platformId: platform_id };
           break;
 
         case "subscriptions":
-          response[id] = [];
+          response[id] = { subscriptions: [] };
+          break;
+        case "allGameReleases":
+          response[id] = { releases: gamesdbData.game.releases };
+          break;
+        case "availableOperations":
+          response[id] = { availableOperations: ["install"] }; // TODO: react to available operations
+          break;
+        case "myFriendsActivity":
+          response[id] = { myFriendsActivity: [] };
           break;
         case "images":
           response[id] = {
-            originalImages: {
-              background: gamesdbData.game.background?.url_format,
-              verticalCover: gamesdbData.game.vertical_cover?.url_format,
-              icon: gamesdbData.game.square_icon?.url_format,
-              logo: gamesdbData.logo?.url_format,
-            },
+            background: gamesdbData.game.background?.url_format
+              .replace("{formatter}", "")
+              .replace("{ext}", "webp"),
+            verticalCover: gamesdbData.game.vertical_cover?.url_format
+              .replace("{formatter}", "")
+              .replace("{ext}", "webp"),
+            squareIcon: gamesdbData.game.square_icon?.url_format
+              .replace("{formatter}", "")
+              .replace("{ext}", "webp"),
+            logo: gamesdbData.logo?.url_format
+              .replace("{formatter}", "")
+              .replace("{ext}", "webp"),
             screenshots: gamesdbData.game.screenshots,
             videos: gamesdbData.game.videos,
           };
@@ -226,80 +233,78 @@ const getGamesPiece = async (
       }
     });
   }
-
   if (platform_id === "gog") {
     const storeApiData = await gamesMeta.storeApi(external_id);
 
-    ids.forEach((id) => {
-      switch (id) {
-        case "isEarlyAccess":
-          response[id] = storeApiData.inDevelopment.active;
-          break;
-        case "isPreorder":
-          response[id] = storeApiData._embedded.isPreorder;
-          break;
-        case "localizations":
-          const perLanguageScopes = storeApiData._embedded.localizations.reduce(
-            (val, lang) => {
-              const code = lang._embedded.language.code;
-              const scope = lang._embedded.localizationScope.type;
-              if (!val[code]) {
-                val[code] = [];
-              }
+    if (storeApiData)
+      ids.forEach((id) => {
+        switch (id) {
+          case "isEarlyAccess":
+            response[id] = storeApiData.inDevelopment.active;
+            break;
+          case "isPreorder":
+            response[id] = storeApiData._embedded.isPreorder;
+            break;
+          case "localizations":
+            const perLanguageScopes =
+              storeApiData._embedded.localizations.reduce((val, lang) => {
+                const code = lang._embedded.language.code;
+                const scope = lang._embedded.localizationScope.type;
+                if (!val[code]) {
+                  val[code] = [];
+                }
 
-              if (!val[code].includes(scope)) {
-                val[code].push(scope);
-              }
+                if (!val[code].includes(scope)) {
+                  val[code].push(scope);
+                }
 
-              return val;
-            },
-            {}
-          );
+                return val;
+              }, {});
 
-          response[id] = {
-            localizations: Object.keys(perLanguageScopes).map((lang) => ({
-              language: lang,
-              scopes: perLanguageScopes[lang],
-            })),
-          };
+            response[id] = {
+              localizations: Object.keys(perLanguageScopes).map((lang) => ({
+                language: lang,
+                scopes: perLanguageScopes[lang],
+              })),
+            };
 
-          break;
-        case "productLinks":
-          response[id] = Object.keys(storeApiData._links).reduce(
-            (prev, next) => {
-              prev[next] = storeApiData._links[next].href;
-              return prev;
-            },
-            {}
-          );
+            break;
+          case "productLinks":
+            response[id] = Object.keys(storeApiData._links).reduce(
+              (prev, next) => {
+                prev[next] = storeApiData._links[next].href;
+                return prev;
+              },
+              {}
+            );
 
-          response[id] = { ...response[id], productCard: response[id].self };
-          break;
-        case "reviewScore":
-          response[id] = { score: null };
-          break;
-        case "storeFeatures":
-          response[id] = { features: storeApiData._embedded.features };
-          break;
-        case "storeMedia":
-          response[id] = {
-            videos: storeApiData._embedded.videos,
-            screenshots: storeApiData._embedded.screenshots.map(
-              (screen) => screen._links.self.href
-            ),
-            isFromProductsApi: true,
-          };
-          break;
-        case "storeOsCompatibility":
-          response[id] = storeApiData._embedded.supportedOperatingSystems.map(
-            (supported) => supported.operatingSystem
-          );
-          break;
-        case "storeTags":
-          response[id] = { tags: storeApiData._embedded.properties };
-          break;
-      }
-    });
+            response[id] = { ...response[id], productCard: response[id].store };
+            break;
+          case "reviewScore":
+            response[id] = { score: null };
+            break;
+          case "storeFeatures":
+            response[id] = { features: storeApiData._embedded.features };
+            break;
+          case "storeMedia":
+            response[id] = {
+              videos: storeApiData._embedded.videos,
+              screenshots: storeApiData._embedded.screenshots.map(
+                (screen) => screen._links.self.href
+              ),
+              isFromProductsApi: true,
+            };
+            break;
+          case "storeOsCompatibility":
+            response[id] = storeApiData._embedded.supportedOperatingSystems.map(
+              (supported) => supported.operatingSystem
+            );
+            break;
+          case "storeTags":
+            response[id] = { tags: storeApiData._embedded.properties };
+            break;
+        }
+      });
   }
 
   const data = {};

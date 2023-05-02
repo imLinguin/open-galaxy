@@ -100,6 +100,7 @@ export const getGalaxyInitData = async () => {
     initialGameReleaseKeys: {
       ownedGameReleaseKeys,
       installedGameReleaseKeys: [],
+      subscribedGameReleaseKeys: []
     },
     friendsRecentPlaySessions,
     settingsData: {
